@@ -29,15 +29,16 @@ class MainActivity : ComponentActivity() {
                 HealthConfigScreen(
                     prefs = prefs,
                     toast = { msg -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() },
-                    onSave = { range, url, urlExternal, token ->
+                    onSave = { range, url, urlExternal, urlTs, token ->
                         prefs.edit()
                             .putInt("range", range)
                             .putString("url", url)
                             .putString("url_external", urlExternal)
+                            .putString("url_tailscale", urlTs)
                             .putString("token", token)
                             .putLong("updated_at", System.currentTimeMillis())
                             .commit()
-                        writeSharedConfig(range, url, urlExternal, token)
+                        writeSharedConfig(range, url, urlExternal, urlTs, token)
                         Toast.makeText(this, "配置已保存", Toast.LENGTH_SHORT).show()
                     },
                     onManualExport = {
@@ -67,12 +68,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun writeSharedConfig(range: Int, url: String, urlExternal: String, token: String) {
+    private fun writeSharedConfig(range: Int, url: String, urlExternal: String, urlTs: String, token: String) {
         val xml = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\" ?>\n" +
             "<map>\n" +
             "    <int name=\"range\" value=\"$range\" />\n" +
             "    <string name=\"url\">$url</string>\n" +
             "    <string name=\"url_external\">$urlExternal</string>\n" +
+            "    <string name=\"url_tailscale\">$urlTs</string>\n" +
             "    <string name=\"token\">$token</string>\n" +
             "</map>\n"
         try {
@@ -97,12 +99,13 @@ class MainActivity : ComponentActivity() {
 fun HealthConfigScreen(
     prefs: android.content.SharedPreferences,
     toast: (String) -> Unit,
-    onSave: (Int, String, String, String) -> Unit,
+    onSave: (Int, String, String, String, String) -> Unit,
     onManualExport: () -> Unit,
 ) {
     var rangeIdx by remember { mutableStateOf(prefs.getInt("range", 1)) }
     var url by remember { mutableStateOf(prefs.getString("url", "") ?: "") }
     var urlExternal by remember { mutableStateOf(prefs.getString("url_external", "") ?: "") }
+    var urlTs by remember { mutableStateOf(prefs.getString("url_tailscale", "") ?: "") }
     var token by remember { mutableStateOf(prefs.getString("token", "") ?: "") }
     var status by remember { mutableStateOf("") }
     var lastKey by remember { mutableStateOf(readLastKey()) }
@@ -172,14 +175,23 @@ fun HealthConfigScreen(
             placeholder = { Text("http://agent-ip:port/api/upload", color = Color(0xFF546E7A)) }
         )
 
-        Text("外网地址（可选，Tailscale 等）", style = MaterialTheme.typography.titleMedium, color = Color(0xFF90CAF9))
+        Text("外网地址（可选）", style = MaterialTheme.typography.titleMedium, color = Color(0xFF90CAF9))
         OutlinedTextField(
             value = urlExternal,
             onValueChange = { urlExternal = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("http://100.x.x.x:8766/api/upload", color = Color(0xFF546E7A)) }
+            placeholder = { Text("http://example.com:8766/api/upload", color = Color(0xFF546E7A)) }
         )
         Text("内网优先，失败自动切外网", color = Color(0xFF90A4AE), fontSize = 12.sp)
+
+        Text("Tailscale 地址（可选，导出时自动开/关 VPN）", style = MaterialTheme.typography.titleMedium, color = Color(0xFF90CAF9))
+        OutlinedTextField(
+            value = urlTs,
+            onValueChange = { urlTs = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("http://100.x.x.x:8766/api/upload", color = Color(0xFF546E7A)) }
+        )
+        Text("不可达时自动拉起 Tailscale，上传完自动关闭", color = Color(0xFF90A4AE), fontSize = 12.sp)
 
         Text("Token（可选）", style = MaterialTheme.typography.titleMedium, color = Color(0xFF90CAF9))
         OutlinedTextField(
@@ -193,7 +205,7 @@ fun HealthConfigScreen(
 
         Button(
             onClick = {
-                onSave(rangeIdx, url.trim(), urlExternal.trim(), token.trim())
+                onSave(rangeIdx, url.trim(), urlExternal.trim(), urlTs.trim(), token.trim())
                 status = "✅ 配置已保存（重启欢太健康后生效）"
             },
             modifier = Modifier.fillMaxWidth()

@@ -73,13 +73,13 @@ class ExportWorker(
     private fun doExport(): Boolean {
         val cfg = readConfigViaRoot()
         var tsStarted = false
-        if (cfg.urlExternal.isNotEmpty() && !tsReachable(cfg.urlExternal)) {
+        if (cfg.urlTailscale.isNotEmpty() && !tsReachable(cfg.urlTailscale)) {
             lspLog("tailscale down, auto-connecting…")
             tsIntent("com.tailscale.ipn.CONNECT_VPN")
             var waited = 0
-            while (waited < 12000 && !tsReachable(cfg.urlExternal)) { Thread.sleep(2000); waited += 2000 }
-            tsStarted = tsReachable(cfg.urlExternal)
-            lspLog(if (tsStarted) "tailscale up (waited ${waited}ms)" else "tailscale failed to start, continue with internal url")
+            while (waited < 12000 && !tsReachable(cfg.urlTailscale)) { Thread.sleep(2000); waited += 2000 }
+            tsStarted = tsReachable(cfg.urlTailscale)
+            lspLog(if (tsStarted) "tailscale up (waited ${waited}ms)" else "tailscale failed to start, ts url will fail")
             if (tsStarted) toast("🔑 已自动开启 Tailscale")
         }
         return try { doExportInner() } finally { if (tsStarted) tsIntent("com.tailscale.ipn.DISCONNECT_VPN") }
@@ -95,9 +95,10 @@ class ExportWorker(
         val prefs = readConfigViaRoot()
         val url = prefs.url
         val urlExternal = prefs.urlExternal
+        val urlTs = prefs.urlTailscale
         val token = prefs.token
-        if (url.isEmpty() && urlExternal.isEmpty()) { toast("⚠️ 未配置上传地址"); return false }
-        val urls = listOfNotNull(url, urlExternal)
+        if (url.isEmpty() && urlExternal.isEmpty() && urlTs.isEmpty()) { toast("⚠️ 未配置上传地址"); return false }
+        val urls = listOfNotNull(url, urlExternal, urlTs)
 
         val cursor = fetchCursor(urls, token)
         lspLog("server watermark: ${cursor.size} tables")
@@ -268,18 +269,19 @@ class ExportWorker(
     private fun readConfigViaRoot(): ConfigVals {
         return try {
             val f = java.io.File("/data/local/tmp/dbkey_config.xml")
-            if (!f.exists()) return ConfigVals(1, "", "", "")
+            if (!f.exists()) return ConfigVals(1, "", "", "", "")
             val text = f.readText()
-            var range = 1; var url = ""; var urlExternal = ""; var token = ""
+            var range = 1; var url = ""; var urlExternal = ""; var urlTs = ""; var token = ""
             Regex("name=\"range\" value=\"(\\d+)\"").find(text)?.let { range = it.groupValues[1].toInt() }
             Regex("name=\"url\">([^<]*)<").find(text)?.let { url = it.groupValues[1] }
             Regex("name=\"url_external\">([^<]*)<").find(text)?.let { urlExternal = it.groupValues[1] }
+            Regex("name=\"url_tailscale\">([^<]*)<").find(text)?.let { urlTs = it.groupValues[1] }
             Regex("name=\"token\">([^<]*)<").find(text)?.let { token = it.groupValues[1] }
-            ConfigVals(range, url, urlExternal, token)
-        } catch (t: Throwable) { ConfigVals(1, "", "", "") }
+            ConfigVals(range, url, urlExternal, urlTs, token)
+        } catch (t: Throwable) { ConfigVals(1, "", "", "", "") }
     }
 
-    data class ConfigVals(val range: Int, val url: String, val urlExternal: String, val token: String)
+    data class ConfigVals(val range: Int, val url: String, val urlExternal: String, val urlTailscale: String, val token: String)
 
     private fun openSqLite(): Class<*>? {
         val candidates = listOf(
