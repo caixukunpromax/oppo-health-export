@@ -1,6 +1,7 @@
 package com.hermes.dbkeyhook
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import java.io.BufferedWriter
 import java.io.File
@@ -52,7 +53,39 @@ class ExportWorker(
         return try { doExport() } finally { RUNNING.set(false) }
     }
 
+    // ---- Tailscale 自动开关 ----
+    // 外网地址不可达 → 广播 CONNECT_VPN 拉起 Tailscale; 导出结束(成功与否)后若是我们拉起的则 DISCONNECT_VPN
+    private fun tsReachable(url: String): Boolean = try {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"; connectTimeout = 3000; readTimeout = 3000
+        }
+        conn.responseCode  // 任意 HTTP 响应(含401/404) = 链路通
+        conn.disconnect(); true
+    } catch (t: Throwable) { false }
+
+    private fun tsIntent(action: String) {
+        try {
+            ctx.sendBroadcast(Intent(action).setPackage("com.tailscale.ipn"))
+            lspLog("tailscale: $action sent")
+        } catch (t: Throwable) { lspLog("tailscale intent fail: $t") }
+    }
+
     private fun doExport(): Boolean {
+        val cfg = readConfigViaRoot()
+        var tsStarted = false
+        if (cfg.urlExternal.isNotEmpty() && !tsReachable(cfg.urlExternal)) {
+            lspLog("tailscale down, auto-connecting…")
+            tsIntent("com.tailscale.ipn.CONNECT_VPN")
+            var waited = 0
+            while (waited < 12000 && !tsReachable(cfg.urlExternal)) { Thread.sleep(2000); waited += 2000 }
+            tsStarted = tsReachable(cfg.urlExternal)
+            lspLog(if (tsStarted) "tailscale up (waited ${waited}ms)" else "tailscale failed to start, continue with internal url")
+            if (tsStarted) toast("🔑 已自动开启 Tailscale")
+        }
+        return try { doExportInner() } finally { if (tsStarted) tsIntent("com.tailscale.ipn.DISCONNECT_VPN") }
+    }
+
+    private fun doExportInner(): Boolean {
         // ponytail: 只有 :SportDaemonService 子进程能加载 libsqlcipher.so（主进程 clns-11 namespace 拒绝），其余子进程跳过
         val pname = android.os.Process.myProcessName()
         if (pname.contains(":") && !pname.endsWith(":SportDaemonService")) {
