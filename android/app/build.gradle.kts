@@ -21,6 +21,12 @@ android {
             isMinifyEnabled = false
         }
     }
+    // 固定 debug 签名用 ~/.android/debug.keystore（与已安装版本一致，避免 XDG 路径新 keystore 导致签名冲突）
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("/home/hermes/.android/debug.keystore")
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
