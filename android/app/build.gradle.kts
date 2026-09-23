@@ -21,10 +21,12 @@ android {
             isMinifyEnabled = false
         }
     }
-    // 固定 debug 签名用 ~/.android/debug.keystore（与已安装版本一致，避免 XDG 路径新 keystore 导致签名冲突）
+    // 固定 debug 签名 keystore（与已安装版本一致，避免 XDG 路径新 keystore 导致签名冲突）。
+    // 可用环境变量 DEBUG_KEYSTORE 覆盖；默认 ~/.android/debug.keystore（标准 debug 签名 android/androiddebugkey/android）。
     signingConfigs {
         getByName("debug") {
-            storeFile = file("/home/hermes/.android/debug.keystore")
+            storeFile = file(System.getenv("DEBUG_KEYSTORE")
+                ?: "${System.getProperty("user.home")}/.android/debug.keystore")
         }
     }
 
