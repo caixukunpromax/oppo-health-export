@@ -19,16 +19,26 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
-    - name: Download libxposed API and prepare
+    - name: Download and Prepare libxposed API
       run: |
+        echo "=== 开始获取最新下载链接 ==="
+        LATEST_URL=$(curl -s https://api.github.com/repos/libxposed/api/releases/latest | grep "browser_download_url" | grep ".aar" | cut -d '"' -f 4)
+        echo "获取到的链接: $LATEST_URL"
+        
+        echo "=== 下载依赖文件 ==="
+        wget -O api.aar "$LATEST_URL"
+        
+        echo "=== 解压并放入正确位置 ==="
         mkdir -p android/app/libs
-        wget -O libxposed-api.aar https://github.com/libxposed/api/releases/latest/download/libxposed-api.aar
-        cd android/app/libs
-        unzip -o ../../libxposed-api.aar classes.jar
-        mv classes.jar libxposed-api.jar
+        unzip -o api.aar classes.jar
+        mv classes.jar android/app/libs/libxposed-api.jar
+        
+        echo "=== 检查文件是否就位 ==="
+        ls -la android/app/libs/
 
     - name: Build with Gradle
       run: |
+        echo "=== 开始编译 APK ==="
         cd android
         chmod +x gradlew
         ./gradlew :app:assembleDebug --no-daemon
