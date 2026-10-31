@@ -36,10 +36,13 @@ jobs:
         echo "=== 检查文件是否就位 ==="
         ls -la android/app/libs/
 
+    - name: Generate Gradle Wrapper
+      working-directory: ./android
+      run: gradle wrapper
+
     - name: Build with Gradle
+      working-directory: ./android
       run: |
-        echo "=== 开始编译 APK ==="
-        cd android
         chmod +x gradlew
         ./gradlew :app:assembleDebug --no-daemon
 
