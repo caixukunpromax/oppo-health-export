@@ -1,0 +1,40 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+
+    - name: Download libxposed API and prepare
+      run: |
+        mkdir -p android/app/libs
+        wget -O libxposed-api.aar https://github.com/libxposed/api/releases/latest/download/libxposed-api.aar
+        cd android/app/libs
+        unzip -o ../../libxposed-api.aar classes.jar
+        mv classes.jar libxposed-api.jar
+
+    - name: Build with Gradle
+      run: |
+        cd android
+        chmod +x gradlew
+        ./gradlew :app:assembleDebug --no-daemon
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: oppo-health-export-apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
